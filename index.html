@@ -818,7 +818,7 @@ tbody tr:hover{background:var(--blue-50);}
               </div>
             </div>
           </div>
-          <button class="btn btn-primary btn-block" style="margin-top:18px;" id="patientAnalyzeBtn" disabled onclick="runAnalysis('patient')">4. Analyze Image</button>
+          <button class="btn btn-primary btn-block" style="margin-top:18px;" id="patientAnalyzeBtn" disabled onclick="runAnalysis('patient')">4. Continue</button>
         </div>
 
         <div>
@@ -827,8 +827,8 @@ tbody tr:hover{background:var(--blue-50);}
             <div id="patientStageIdle" style="color:rgba(255,255,255,.5);font-size:13px;text-align:center;padding:20px;">Upload an image to preview the scan visualization</div>
           </div>
           <div style="margin-top:18px;">
-            <div class="section-title-row"><h3>5. Result</h3></div>
-            <div class="result-box" id="patientResultBox">Prediction will appear here after backend integration.</div>
+            <div class="section-title-row"><h3>5. Status</h3></div>
+            <div class="result-box" id="patientResultBox">Upload and continue to prepare your image for your doctor.</div>
           </div>
           <div class="card" style="margin-top:18px;padding:22px;display:none;" id="patientSendToDoctorCard">
             <div class="section-title-row"><h3>6. Send to doctor</h3></div>
@@ -874,7 +874,6 @@ tbody tr:hover{background:var(--blue-50);}
       <li><button data-panel="d-queue" onclick="doctorNav(this)"><svg width="18" height="18"><use href="#ic-bell"/></svg>Patient Queue<span class="badge-dot" id="doctorQueueBadgeDot" style="display:none;"></span></button></li>
       <li><button data-panel="d-priority" onclick="doctorNav(this)"><svg width="18" height="18"><use href="#ic-flag"/></svg>Priority Queue</button></li>
       <li><button data-panel="d-scanner" onclick="doctorNav(this)"><svg width="18" height="18"><use href="#ic-scan"/></svg>Scanner</button></li>
-      <li><button data-panel="d-predictions" onclick="doctorNav(this)"><svg width="18" height="18"><use href="#ic-predict"/></svg>Predictions</button></li>
       <li><button data-panel="d-reports" onclick="doctorNav(this)"><svg width="18" height="18"><use href="#ic-report"/></svg>Reports</button></li>
       <li><button data-panel="d-research" onclick="doctorNav(this)"><svg width="18" height="18"><use href="#ic-research"/></svg>Research</button></li>
       <li><button data-panel="d-profile" onclick="doctorNav(this)"><svg width="18" height="18"><use href="#ic-user"/></svg>Profile</button></li>
@@ -955,10 +954,17 @@ tbody tr:hover{background:var(--blue-50);}
           </label>
         </div>
         <div class="form-grid">
-          <div class="field" id="doctorPatientField"><label>Patient</label>
-            <select id="doctorPatientSelect"><option value="">— Select a patient —</option></select>
+          <div class="field" id="doctorPatientField"><label>Patient name</label>
+            <input type="text" id="doctorPatientNameInput" list="doctorPatientNameList" placeholder="Type the patient's full name" autocomplete="off" oninput="handleDoctorPatientNameInput()">
+            <datalist id="doctorPatientNameList"></datalist>
           </div>
           <div class="field"><label>Eye</label><select id="doctorEyeSelect"><option>Right (OD)</option><option>Left (OS)</option><option>Both</option></select></div>
+        </div>
+        <div class="form-grid" id="doctorPatientDetailsRow" style="margin-top:14px;">
+          <div class="field"><label>Patient ID</label><input type="text" id="doctorPatientIdField" placeholder="Auto-filled for existing patients"></div>
+          <div class="field"><label>Age</label><input type="text" id="doctorPatientAgeField" placeholder="Age"></div>
+          <div class="field"><label>Gender</label><select id="doctorPatientGenderField"><option value="">—</option><option>Male</option><option>Female</option><option>Other</option></select></div>
+          <div class="field"><label>Phone</label><input type="text" id="doctorPatientPhoneField" placeholder="Phone number"></div>
         </div>
         <p class="small-muted" id="doctorDemoHint" style="display:none;margin:10px 0 0;">Demo mode is on — the analysis will run on any image you upload, but the result won't be saved to a patient record.</p>
       </div>
@@ -1007,12 +1013,6 @@ tbody tr:hover{background:var(--blue-50);}
           </div>
         </div>
       </div>
-    </section>
-
-    <!-- Predictions -->
-    <section class="panel" id="d-predictions">
-      <div class="app-topbar"><div><h2>Predictions</h2><p class="sub">Scans awaiting AI-assisted analysis review.</p></div></div>
-      <div class="card" id="predictionsCard"></div>
     </section>
 
     <!-- Reports -->
@@ -1785,7 +1785,7 @@ function removeImage(who){
   resetStage(who);
   const resultBox=document.getElementById(who+'ResultBox');
   resultBox.className='result-box';
-  resultBox.textContent='Prediction will appear here after backend integration.';
+  resultBox.textContent = who==='patient' ? 'Upload and continue to prepare your image for your doctor.' : 'Prediction will appear here after backend integration.';
   if(who==='patient'){ const c=document.getElementById('patientSendToDoctorCard'); if(c) c.style.display='none'; }
 }
 function zoomImage(imgId){
@@ -2024,15 +2024,18 @@ function runAnalysis(who){
     if(demoMode){
       patientId=null; patientName=null;
     }else{
-      const sel=document.getElementById('doctorPatientSelect');
-      if(!sel.value){ toast('Select a patient, or check "Quick demo scan" to skip this step','info'); return; }
-      patientId=sel.value; patientName=sel.options[sel.selectedIndex].dataset.name;
+      const doc=currentUser();
+      const nameVal=document.getElementById('doctorPatientNameInput').value.trim();
+      if(!nameVal){ toast('Type the patient\'s name, or check "Quick demo scan" to skip this step','info'); return; }
+      const patientRec=findOrCreateManualDoctorPatient(doc);
+      if(!patientRec) return;
+      patientId=patientRec.patientId; patientName=patientRec.name;
     }
   }
 
-  btn.disabled=true; btn.textContent='Analyzing...';
+  btn.disabled=true; btn.textContent = who==='patient' ? 'Processing...' : 'Analyzing...';
   resultBox.className='result-box';
-  resultBox.textContent='Processing image — generating sample screening overlay...';
+  resultBox.textContent = who==='patient' ? 'Processing your image...' : 'Processing image — generating sample screening overlay...';
 
   stage.innerHTML='<img src="'+uploadState[who]+'" style="width:100%;height:100%;object-fit:cover;opacity:.5;">'+
     '<div class="scan-ring"></div><div class="scan-line"></div>';
@@ -2053,7 +2056,7 @@ function runAnalysis(who){
       setTimeout(()=>{
         generateHeatmapOverlay(uploadState[who],function(heatmapUrl){
         generateFullAIResult(uploadState[who],patientId,eye,function(pred){
-          btn.disabled=false; btn.textContent = who==='patient' ? '4. Analyze Image' : 'Analyze Image';
+          btn.disabled=false; btn.textContent = who==='patient' ? '4. Continue' : 'Analyze Image';
 
           stage.innerHTML='<img src="'+heatmapUrl+'" style="width:100%;height:100%;object-fit:cover;">'+
             '<div style="position:absolute;top:10px;left:10px;background:rgba(217,139,59,0.95);color:#fff;padding:5px 12px;border-radius:6px;font-size:10.5px;font-weight:700;letter-spacing:.03em;">SAMPLE DEMO</div>';
@@ -2071,7 +2074,11 @@ function runAnalysis(who){
           }
 
           resultBox.classList.add('done');
-          resultBox.innerHTML=renderAIResultBlock(pred);
+          if(who==='patient'){
+            resultBox.innerHTML='<b style="color:var(--navy-950);">Image processed successfully.</b><br><span class="small-muted">Your retina image is ready. Choose your doctor below and send it for review — your doctor will share a report with you once it has been reviewed.</span>';
+          }else{
+            resultBox.innerHTML=renderAIResultBlock(pred);
+          }
 
           const scanId=uid('SC');
           const scans=getScans();
@@ -2104,7 +2111,7 @@ function runAnalysis(who){
           setScans(scans);
           activeScan[who]=scanId;
 
-          toast('Scan analyzed'+(who==='patient'?' — you can now send it to a doctor':''),'success');
+          toast(who==='patient' ? 'Image processed — you can now send it to your doctor' : 'Scan analyzed','success');
           if(who==='patient'){
             loadPatientDashboard();
             const sendCard=document.getElementById('patientSendToDoctorCard');
@@ -2127,21 +2134,77 @@ function loadPatientScannerContext(){
   const p=currentPatientRecord();
   if(!p) return;
   document.getElementById('scannerPatientLabel').value=p.name+' ('+p.patientId+')';
+  populateDoctorSelect('patientSendDoctorSelect');
 }
 function loadDoctorScannerContext(){
   const doc=currentUser();
   if(!doc) return;
-  const sel=document.getElementById('doctorPatientSelect');
-  const myPatientsList=getPatients().filter(p=>p.assignedDoctorId===doc.id);
-  const prevValue=sel.value;
-  sel.innerHTML='<option value="">— Select a patient —</option>'+
-    myPatientsList.map(p=>'<option value="'+p.patientId+'" data-name="'+p.name+'">'+p.name+' ('+p.patientId+')</option>').join('');
-  if(myPatientsList.some(p=>p.patientId===prevValue)) sel.value=prevValue;
+  const list=document.getElementById('doctorPatientNameList');
+  const scansAll=getScans();
+  const knownPatients=getPatients().filter(p=>p.assignedDoctorId===doc.id || scansAll.some(s=>s.patientId===p.patientId && s.sentToDoctorId===doc.id));
+  list.innerHTML=knownPatients.map(p=>'<option value="'+p.name+'" data-id="'+p.patientId+'">').join('');
+}
+function handleDoctorPatientNameInput(){
+  const doc=currentUser();
+  if(!doc) return;
+  const name=document.getElementById('doctorPatientNameInput').value.trim();
+  if(!name) return;
+  const scansAll=getScans();
+  const knownPatients=getPatients().filter(p=>p.assignedDoctorId===doc.id || scansAll.some(s=>s.patientId===p.patientId && s.sentToDoctorId===doc.id));
+  const match=knownPatients.find(p=>p.name.toLowerCase()===name.toLowerCase());
+  if(match){
+    document.getElementById('doctorPatientIdField').value=match.patientId;
+    document.getElementById('doctorPatientAgeField').value=match.age||'';
+    document.getElementById('doctorPatientGenderField').value=match.gender||'';
+    document.getElementById('doctorPatientPhoneField').value=match.phone||'';
+  }
+}
+/* Finds an existing patient this doctor can access by ID or exact name match,
+   or creates a new patient record from the manually entered details. */
+function findOrCreateManualDoctorPatient(doc){
+  const name=document.getElementById('doctorPatientNameInput').value.trim();
+  if(!name) return null;
+  const idField=document.getElementById('doctorPatientIdField').value.trim();
+  const age=document.getElementById('doctorPatientAgeField').value.trim();
+  const gender=document.getElementById('doctorPatientGenderField').value;
+  const phone=document.getElementById('doctorPatientPhoneField').value.trim();
+  const patients=getPatients();
+
+  let patient=null;
+  if(idField) patient=patients.find(p=>p.patientId.toLowerCase()===idField.toLowerCase());
+  if(!patient) patient=patients.find(p=>p.name.toLowerCase()===name.toLowerCase() && (p.assignedDoctorId===doc.id || getScans().some(s=>s.patientId===p.patientId && s.sentToDoctorId===doc.id)));
+
+  if(patient){
+    let changed=false;
+    if(age && patient.age!==age){ patient.age=age; changed=true; }
+    if(gender && patient.gender!==gender){ patient.gender=gender; changed=true; }
+    if(phone && patient.phone!==phone){ patient.phone=phone; changed=true; }
+    if(changed) setPatients(patients);
+    document.getElementById('doctorPatientIdField').value=patient.patientId;
+    return patient;
+  }
+
+  const newPatientId=uid('PT');
+  const newPatient={
+    userId:null, patientId:newPatientId, name, email:'', age, gender, phone:'',
+    medicalHistory:'', eyeHistory:'', medications:'', allergies:'',
+    assignedDoctorId:doc.id, profileComplete:false, createdAt:nowISO()
+  };
+  newPatient.phone=phone;
+  patients.push(newPatient);
+  setPatients(patients);
+  document.getElementById('doctorPatientIdField').value=newPatientId;
+  toast('New patient "'+name+'" added ('+newPatientId+')','success');
+  loadDoctorScannerContext();
+  return newPatient;
 }
 function toggleDoctorDemoMode(){
   const on=document.getElementById('doctorDemoToggle').checked;
   document.getElementById('doctorPatientField').style.opacity=on?'0.45':'1';
-  document.getElementById('doctorPatientSelect').disabled=on;
+  document.getElementById('doctorPatientNameInput').disabled=on;
+  const detailsRow=document.getElementById('doctorPatientDetailsRow');
+  detailsRow.style.opacity=on?'0.45':'1';
+  ['doctorPatientIdField','doctorPatientAgeField','doctorPatientGenderField','doctorPatientPhoneField'].forEach(id=>document.getElementById(id).disabled=on);
   document.getElementById('doctorDemoHint').style.display=on?'block':'none';
 }
 
@@ -2200,18 +2263,34 @@ function renderPatientQueue(){
   const doc=currentUser();
   if(!doc || doc.role!=='doctor') return;
   const q=(document.getElementById('doctorQueueSearch')||{}).value||'';
-  let scans=getScans().filter(s=>s.sentToDoctorId===doc.id);
-  if(q) scans=scans.filter(s=>(s.patientName||'').toLowerCase().includes(q.toLowerCase())||(s.patientId||'').toLowerCase().includes(q.toLowerCase()));
-  scans.sort((a,b)=>new Date(b.sentAt)-new Date(a.sentAt));
+  const scansAll=getScans();
+  const patientsAll=getPatients();
+  let patientsInQueue=patientsAll.filter(p=>p.assignedDoctorId===doc.id || scansAll.some(s=>s.patientId===p.patientId && s.sentToDoctorId===doc.id));
+  if(q) patientsInQueue=patientsInQueue.filter(p=>(p.name||'').toLowerCase().includes(q.toLowerCase())||(p.patientId||'').toLowerCase().includes(q.toLowerCase()));
+  patientsInQueue.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+
   const card=document.getElementById('doctorQueueCard');
   const badge=document.getElementById('doctorQueueBadgeDot');
-  if(badge) badge.style.display = scans.some(s=>s.status==='pending') ? 'block' : 'none';
+  if(badge) badge.style.display = scansAll.some(s=>s.sentToDoctorId===doc.id && s.status==='pending') ? 'block' : 'none';
   if(!card) return;
-  if(!scans.length){ card.innerHTML=emptyState('ic-bell','Patient queue is empty','Scans that patients send directly to you will appear here immediately.'); return; }
-  card.innerHTML='<div class="table-wrap" style="border:none;"><table><thead><tr><th>Patient</th><th>ID</th><th>Eye</th><th>Sent</th><th>AI result</th><th>Status</th><th>Action</th></tr></thead><tbody>'+
-    scans.map(s=>'<tr><td>'+s.patientName+'</td><td>'+s.patientId+'</td><td>'+s.eye+'</td><td>'+fmtDate(s.sentAt)+'</td><td>'+s.aiResultText+'</td><td>'+statusPill(s.status)+'</td>'+
-      '<td><button class="table-link" onclick="openPatientDetails(\''+s.patientId+'\')">Patient details</button> <button class="table-link" onclick="reviewScan(\''+s.scanId+'\')">Open case</button></td></tr>').join('')+
-    '</tbody></table></div>';
+
+  const header='<div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--border);">'+
+    '<span class="small-muted">Patients you are assigned to, or who have sent you a scan directly.</span>'+
+    '<button class="btn btn-primary btn-sm" onclick="doctorNavById(\'d-scanner\')">+ Add Patient / Upload Scan</button></div>';
+
+  if(!patientsInQueue.length){ card.innerHTML=header+emptyState('ic-bell','Patient queue is empty','Patients assigned to you, or who send you a scan, will appear here with all of their submitted images.'); return; }
+
+  card.innerHTML=header+patientsInQueue.map(p=>{
+    const scans=scansAll.filter(s=>s.patientId===p.patientId && (s.sentToDoctorId===doc.id || p.assignedDoctorId===doc.id))
+      .sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+    return '<div style="padding:16px 20px;border-bottom:1px solid var(--border);">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'+
+        '<span style="font-weight:700;color:var(--navy-950);">'+p.name+' <span class="small-muted" style="font-weight:500;">('+p.patientId+')</span> <span class="small-muted">— '+scans.length+' scan'+(scans.length===1?'':'s')+' submitted</span></span>'+
+        '<button class="table-link" onclick="openPatientDetails(\''+p.patientId+'\')">Patient details</button>'+
+      '</div>'+
+      (scans.length ? '<div style="margin-top:10px;">'+scanListTable(scans,false,'doctor')+'</div>' : '<p class="small-muted" style="margin-top:8px;">No scans submitted yet.</p>')+
+    '</div>';
+  }).join('');
 }
 
 /* Open an existing (patient-submitted) scan inside the doctor scanner for review */
@@ -2226,7 +2305,12 @@ function reviewScan(scanId){
   }
   doctorNavById('d-scanner');
   loadDoctorScannerContext();
-  document.getElementById('doctorPatientSelect').value=scan.patientId;
+  const patientRec=getPatients().find(p=>p.patientId===scan.patientId);
+  document.getElementById('doctorPatientNameInput').value=scan.patientName||(patientRec?patientRec.name:'');
+  document.getElementById('doctorPatientIdField').value=scan.patientId||'';
+  document.getElementById('doctorPatientAgeField').value=patientRec?(patientRec.age||''):'';
+  document.getElementById('doctorPatientGenderField').value=patientRec?(patientRec.gender||''):'';
+  document.getElementById('doctorPatientPhoneField').value=patientRec?(patientRec.phone||''):'';
   document.getElementById('doctorEyeSelect').value=scan.eye;
   uploadState.doctor=scan.imageDataUrl;
   activeScan.doctor=scan.scanId;
