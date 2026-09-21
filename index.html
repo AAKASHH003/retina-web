@@ -1199,7 +1199,11 @@ body.home-active .main-header{ border-bottom: 1px solid var(--line); }
           <div style="font-weight:800;color:var(--navy)">Report ready for verification & dispatch</div>
           <div class="small">Share with the patient via ABHA-linked record or print for the Rural Centre file. All five heatmaps are included — one per page.</div>
         </div>
-        <button class="btn btn-primary" onclick="goHome()">Done — Back to Home</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline" onclick="window.print()">🖨 Print / Save as PDF</button>
+          <button class="btn btn-primary" onclick="downloadPdf()">⬇ Download Report</button>
+          <button class="btn btn-primary" onclick="goHome()">Done — Back to Home</button>
+        </div>
       </div>
     </div>
   </div>
